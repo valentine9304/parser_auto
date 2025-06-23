@@ -2,6 +2,7 @@
 
 from typing import List, Optional, Dict
 from pathlib import Path
+import asyncio
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -14,8 +15,9 @@ from aiogram.types import (
 )
 
 from settings import app_settings
-from src.parser import parse_response, ParsingError
-from src.parser_drom import parse_response_drom
+from src.parser import AutoRuParser
+from src.parser_drom import DromParser
+from utils.parser_utils import ParsingError
 from src.render import generate_test_svg, draw_car_info_on_image
 from src.schemas import Car
 
@@ -98,7 +100,7 @@ async def delete_user_messages(
             print(f"Failed to delete media message {msg_id}: {e}")
 
 
-async def process_car_url(message: types.Message, url: str, parser_func) -> None:
+async def process_car_url(message: types.Message, url: str, parse_func) -> None:
     """Process car URL and send car details with photos."""
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -109,7 +111,7 @@ async def process_car_url(message: types.Message, url: str, parser_func) -> None
     print(f"Processing URL: {url}")
 
     try:
-        car = parser_func(url)
+        car = parse_func(url)
         if not car or not car.images:
             await message.reply(
                 "Не удалось извлечь данные. Проверьте ссылку или попробуйте позже."
@@ -147,16 +149,34 @@ async def start(message: types.Message) -> None:
     )
 
 
-@dp.message_handler(lambda message: message.text.startswith("https://auto.ru"))
-async def handle_auto_ru(message: types.Message) -> None:
-    """Handle Auto.ru URLs."""
-    await process_car_url(message, message.text.strip(), parse_response)
+def setup_handlers(dp: Dispatcher) -> None:
+    """Register message handlers for the bot."""
+    # Словарь для маппинга доменов на парсеры
+    PARSERS = {
+        "https://auto.ru": AutoRuParser,
+        "https://auto.drom.ru": DromParser,
+    }
 
+    @dp.message_handler(
+        lambda message: any(
+            message.text.startswith(domain) for domain in PARSERS.keys()
+        )
+    )
+    async def handle_car_url(message: types.Message) -> None:
+        """Handle car URLs for supported websites (Auto.ru, Drom.ru)."""
+        url = message.text.strip()
 
-@dp.message_handler(lambda message: message.text.startswith("https://auto.drom.ru"))
-async def handle_drom_ru(message: types.Message) -> None:
-    """Handle Drom.ru URLs."""
-    await process_car_url(message, message.text.strip(), parse_response_drom)
+        # Находим подходящий парсер
+        for domain, parser_class in PARSERS.items():
+            if url.startswith(domain):
+                parser = parser_class()
+                await process_car_url(message, url, parser.parse)
+                return
+
+        # Если домен не поддерживается
+        await message.answer(
+            "Ошибка: неподдерживаемый сайт. Используйте ссылки на auto.ru или auto.drom.ru."
+        )
 
 
 @dp.callback_query_handler(lambda call: call.data.startswith("photo_"))
@@ -258,4 +278,5 @@ if __name__ == "__main__":
         raise ValueError("TELEGRAM_TOKEN not found in .env file!")
 
     print("Bot is starting...")
+    setup_handlers(dp)  # Регистрируем обработчики
     executor.start_polling(dp, skip_updates=True)
