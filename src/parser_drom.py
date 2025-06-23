@@ -1,12 +1,11 @@
-"""Parse and process data from the server."""
+"""Parse and process car data from the server."""
 
 import random
-import re
 import time
-from typing import List, Optional
+from typing import List, Optional, Dict
+from urllib.parse import urlencode
 
 from bs4 import BeautifulSoup, Tag
-from requests import Response, get
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -18,205 +17,126 @@ from settings import app_settings
 from src import strings
 from src.schemas import Car
 
-
-def get_pages_amount(content: bytes) -> int:
-    """Calculate number of pages."""
-    soup = BeautifulSoup(content, "html.parser")
-    target_data = soup.find(strings.SPAN_TAG, class_=strings.TARGET_CLASS)
-
-    if not target_data:
-        return 0
-
-    return len(target_data.contents)
-
-
-def _extract_text(element: Optional[Tag], default: str = "", second_text: bool = False) -> str:
-    """Extract text from a BeautifulSoup element, return default if not found.
-    
-    Args:
-        element: BeautifulSoup Tag object or None.
-        default: Default value to return if element is None (default is "").
-        second_text: If True, return only the second text (e.g., "2024" from "Год выпуска2024").
-    
-    Returns:
-        str: Full text of the element or second text if second_text=True, otherwise default.
-    """
-    # if not element:
-    #     return default
-
-    # if not element:
-    #     return default
-
-    # if second_text:
-    #     # Извлекаем весь текст
-    #     full_text = element.get_text().strip()
-    #     # Список известных названий атрибутов
-    #     attribute_prefixes = [
-    #         "Год выпуска",
-    #         "Двигатель",
-    #         "Коробка",
-    #         "Цвет",
-    #         "Привод"
-    #     ]
-    #     # Проверяем, начинается ли текст с одного из известных префиксов
-    #     for prefix in attribute_prefixes:
-    #         if full_text.startswith(prefix):
-    #             # Извлекаем значение, убирая префикс
-    #             return full_text[len(prefix):].strip()
-    #     # Если префикс не найден, возвращаем весь текст
-    #     return full_text
-    # else:
-    #     # Возвращаем весь текст, как раньше
-    return element.get_text().strip()
+# Константы для парсинга
+CAR_ATTRIBUTES = {
+    "Двигатель": "engine",
+    "Мощность": "engine_power",
+    "Пробег": "mileage",
+    "Цвет": "color",
+    "Коробка передач": "transmission",
+    "Привод": "drive",
+}
 
 
-def clean_price(text):
-    # Извлекаем все цифры, игнорируя пробелы и другие символы
-    return text.replace('&nbsp;', ' ').replace('руб', '').strip()
-    # return ''.join(filter(str.isdigit, text))
+class ParsingError(Exception):
+    """Custom exception for parsing errors."""
 
-def _extract_attribute(
-    container: Tag, 
-    tag: str, 
-    class_name: str, 
-    default: str = "Не указано",
-    second_text: bool = False
-) -> str:
-    """Extract attribute from a nested div structure."""
-    if content := container.find(tag, class_name):
-        if second_text:
-            return _extract_text(content, default, second_text=True)
-        else:
-            inner_elements = content.find_all(strings.DIV_TAG, strings.ROW_CLASS)
-            return _extract_text(inner_elements[1] if len(inner_elements) >= 2 else None, default)
-    return default
+    pass
 
 
-def _parse_car_name(name_content: Optional[Tag], default: str = "") -> str:
-    """Parse car name from text, removing year and comma.
-    
-    Args:
-        name_content: BeautifulSoup Tag object containing the car name.
-        default: Default value to return if name_content is None (default is "").
-    
-    Returns:
-        str: Car name without year and comma, or default if not found.
-    """
-    if not name_content:
-        return default
-
-    raw_name = name_content.get_text().strip()
-    # Удаляем запятую и всё, что после неё (например, ", 2024")
-    name_parts = raw_name.split(",", 1)
-    return name_parts[0].strip() if name_parts else default
+def _extract_text(element: Optional[Tag], default: str = "") -> str:
+    """Extract and clean text from BeautifulSoup element."""
+    return element.get_text().strip() if element else default
 
 
-def _parse_price(price_content: Optional[Tag]) -> int:
-    """Parse price from text, handling NBSP and RUR symbols."""
-    if not price_content:
-        return 0
-
-    raw_price = price_content.get_text().strip().split(strings.RUR)[0]
-
-    try:
-        return raw_price
-    except ValueError:
-        return 0
+def clean_price(text: str) -> str:
+    """Clean price string by removing non-numeric characters."""
+    return text.replace("&nbsp;", " ").replace("руб", "").strip()
 
 
-def parse_content(url, content: bytes) -> List[Car]:
-    car_url = url
-    soup = BeautifulSoup(content, "html.parser")
-    meta_tag = soup.find('meta', property='og:title')
+def _parse_title(soup: BeautifulSoup) -> tuple[str, str, str]:
+    """Parse car title, year and price from meta tag or fallback to h1."""
+    meta_tag = soup.find("meta", property="og:title")
 
     if meta_tag:
-        title = meta_tag.get('content')
-        parts = title.split(',')
-        car_name = parts[0].replace('Продажа', '').strip().rsplit(' ', 1)[0]
-        car_year = parts[0].replace('Продажа', '').strip().rsplit(' ', 1)[1]
-        price_str = parts[1].strip()
-        car_price = clean_price(price_str)
-    else:
-        car_name = _extract_text(
-            soup.find(strings.H1_TAG)
+        title = meta_tag.get("content", "")
+        parts = title.split(",")
+        car_name = parts[0].replace("Продажа", "").strip().rsplit(" ", 1)[0]
+        car_year = (
+            parts[0].rsplit(" ", 1)[1] if len(parts[0].rsplit(" ", 1)) > 1 else ""
         )
-        car_price = ''
+        price = clean_price(parts[1].strip()) if len(parts) > 1 else ""
+    else:
+        car_name = _extract_text(soup.find(strings.H1_TAG))
+        car_year = ""
+        price = ""
 
-    table = soup.find('table')
-    car_data = {}
+    return car_name, car_year, price
 
-    # Проходим по строкам таблицы
-    for row in table.find_all('tr'):
-        # Находим заголовок (th) и значение (td)
-        header = row.find('th')
-        value = row.find('td')
+
+def _parse_car_attributes(soup: BeautifulSoup) -> Dict[str, str]:
+    """Parse car attributes from table."""
+    table = soup.find("table")
+    if not table:
+        return {}
+
+    car_data = {"engine": ""}
+    for row in table.find_all("tr"):
+        header = row.find("th")
+        value = row.find("td")
 
         if header and value:
-            # Извлекаем текст из заголовка и значения
             key = _extract_text(header)
-            val = _extract_text(value)
+            val = (
+                _extract_text(value)
+                .replace(",\xa0налог", "")
+                .replace("\xa0", " ")
+                .strip()
+            )
 
-            if key in ['Мощность', 'Пробег']:
-                val = val.replace(',\xa0налог', '').replace('\xa0', ' ').strip()
+            if key in CAR_ATTRIBUTES:
+                if key == "Мощность" and car_data["engine"]:
+                    car_data["engine"] += f", {val}"
+                elif key == "Двигатель":
+                    car_data["engine"] = val
+                else:
+                    car_data[CAR_ATTRIBUTES[key]] = val
 
-            if key == "Двигатель":
-                car_data["engine"] = val
-            elif key == "Мощность":
-                car_data["engine"] += ", " + val
-            elif key == "Пробег":
-                car_data["mileage"] = val
-            elif key == "Цвет":
-                car_data["color"] = val
-            elif key == "Коробка передач":
-                car_data["transmission"] = val
-            elif key == "Привод":
-                car_data["drive"] = val
+    return car_data
 
-    image_divs = soup.find('div', {'data-ftid': 'bull-page_bull-gallery_thumbnails'})
+
+def _parse_images(soup: BeautifulSoup) -> List[str]:
+    """Parse car images URLs."""
+    image_divs = soup.find("div", {"data-ftid": "bull-page_bull-gallery_thumbnails"})
+    if not image_divs:
+        return []
+
     image_urls = []
+    for link in image_divs.find_all("a", limit=3):
+        href = link.get("href", "")
+        if href:
+            image_urls.append(f"https:{href}" if href.startswith("//") else href)
 
-    if image_divs:
-        links = image_divs.find_all('a', limit=3)
-        for link in links:
-            href = link.get('href')
-            if href:
-                # Если href начинается с "//", добавляем "https:"
-                if href.startswith('//'):
-                    href = 'https:' + href
-                image_urls.append(href)
+    return image_urls
 
-    car = Car(
-        # id=car_id,
+
+def parse_content(url: str, content: bytes) -> Car:
+    """Parse HTML content and create Car object."""
+    soup = BeautifulSoup(content, "html.parser")
+    car_name, car_year, car_price = _parse_title(soup)
+    car_data = _parse_car_attributes(soup)
+    image_urls = _parse_images(soup)
+
+    return Car(
         name=car_name,
         price=car_price,
         year=car_year,
-        mileage=car_data["mileage"],
-        engine=car_data["engine"],
-        transmission=car_data["transmission"],
-        color=car_data["color"],
-        drive=car_data["drive"],
+        mileage=car_data.get("mileage", ""),
+        engine=car_data.get("engine", ""),
+        transmission=car_data.get("transmission", ""),
+        color=car_data.get("color", ""),
+        drive=car_data.get("drive", ""),
         images=image_urls,
-        url=car_url,
+        url=url,
     )
 
-    return car
 
-
-def get_html(url: str, headers: dict, params: dict | None = None) -> Response:
-    """Get the response from the server."""
-    try:
-        return get(url, headers=headers, params=params)
-    except Exception as error:
-        raise ConnectionError(f"При выполнении запроса произошла ошибка: {error}")
-
-
-def get_html_with_selenium(url: str, params: dict | None = None) -> str | None:
-    """Get HTML content using Selenium for better anti-bot protection bypass."""
-    service = Service()
+def get_selenium_driver() -> webdriver.Chrome:
+    """Initialize and configure Selenium WebDriver."""
     options = Options()
-
     if app_settings.USE_SELENIUM_IN_BACKGROUND:
         options.add_argument("--headless")
+
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument(f"user-agent={app_settings.HEADERS['user-agent']}")
@@ -224,100 +144,57 @@ def get_html_with_selenium(url: str, params: dict | None = None) -> str | None:
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    driver = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(service=Service(), options=options)
     driver.set_window_size(1920, 1080)
     driver.execute_script(
         "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
     )
 
+    return driver
+
+
+def get_html_with_selenium(url: str, params: Optional[Dict] = None) -> Optional[str]:
+    """Get HTML content using Selenium."""
     try:
-        full_url = url
-        if params:
-            full_url += "?" if "?" not in full_url else "&"
-            full_url += "&".join([f"{k}={v}" for k, v in params.items()])
+        with get_selenium_driver() as driver:
+            full_url = url
+            if params:
+                full_url += (
+                    f"?{urlencode(params)}"
+                    if "?" not in url
+                    else f"&{urlencode(params)}"
+                )
 
-        driver.get(full_url)
+            driver.get(full_url)
 
-        if app_settings.COOKIE:
-            for cookie_str in app_settings.COOKIE.split(";"):
-                if "=" in cookie_str:
-                    name, value = cookie_str.strip().split("=", 1)
-                    driver.add_cookie(
-                        {"name": name, "value": value, "domain": ".auto.ru"}
-                    )
+            if app_settings.COOKIE:
+                for cookie_str in app_settings.COOKIE.split(";"):
+                    if "=" in cookie_str:
+                        name, value = cookie_str.strip().split("=", 1)
+                        driver.add_cookie(
+                            {"name": name, "value": value, "domain": ".auto.ru"}
+                        )
 
-        # time.sleep(TIME_TO_ENTER_CAPCHA)
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
 
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+            time.sleep(random.uniform(1, 3))
 
-        time.sleep(random.uniform(1, 3))
-
-        return driver.page_source
+            return driver.page_source
 
     except Exception as exc:
         print(f"Ошибка при использовании Selenium: {exc}")
         return None
 
-    finally:
-        driver.quit()
 
-
-def parse_response_drom(url: str) -> list[Car] | None:
-    """Parse the request."""
+def parse_response_drom(url: Optional[str] = None) -> Optional[Car]:
+    """Parse car data from given URL."""
     url = url or app_settings.URL
-
-    if app_settings.USE_SELENIUM:
-        car = parse_response_with_selenium(url)
-    else:
-        car = simple_parse_response(url)
-
-    if not car:
-        return None
-
-    return car
-
-
-def simple_parse_response(url: str) -> list[Car] | None:
-    html = get_html(url, app_settings.HEADERS)
-    if html.status_code != 200:
-        print(f"Сайт вернул статус-код {html.status_code}")
-        return None
-
-    if "captcha" in html.text.lower():
-        print(
-            "Обнаружена капча! 🤬 \n"
-            "Попробуйте обойти капчу и получить данные при помощи Selenium, "
-            "для этого нужно запустить парсер с переменной 'USE_SELENIUM=True'. "
-        )
-        return None
-
-    cars: list[Car] = []
-    pages_amount = get_pages_amount(html.content)
-    for page in range(1, pages_amount + 1):
-        print(f"Парсим {page} страницу из {pages_amount}...")
-
-        html = get_html(url, app_settings.HEADERS, params={"page": page})
-        cars.extend(parse_content(content=html.content))
-
-    return cars
-
-
-def parse_response_with_selenium(url: str) -> Car | None:
     html_content = get_html_with_selenium(url)
 
     if not html_content:
-        print("Не удалось получить содержимое страницы.")
-        return None
+        raise ParsingError("Не удалось получить содержимое страницы")
 
-    # if "captcha" in html_content.lower():
-    #     print("Снова капча! 🤬")
-    #     return None
-
-    html_bytes = html_content.encode("utf-8")
-
-    car = parse_content(url, content=html_bytes)
-
-    return car
+    return parse_content(url, html_content.encode("utf-8"))
