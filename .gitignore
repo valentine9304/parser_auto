@@ -1,0 +1,12 @@
+*.ini
+*.log
+*.env
+cache
+webserver/static/.webassets-cache
+__pycache__
+panel.db
+.DS_Store
+venv
+pjproject
+*.vscode
+
