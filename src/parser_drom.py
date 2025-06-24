@@ -37,7 +37,8 @@ class DromParser(BaseParser):
         if meta_tag:
             title = meta_tag.get("content", "")
             parts = title.split(",")
-            car_name = parts[0].replace("Продажа", "").strip().rsplit(" ", 1)[0]
+            # car_name = parts[0].replace("Продажа", "").strip().rsplit(" ", 1)[0]
+            car_name = extract_text(soup.find("h1")).split(",")[0].replace("Продажа", "").strip()
             car_year = (
                 parts[0].rsplit(" ", 1)[1] if len(parts[0].rsplit(" ", 1)) > 1 else ""
             )

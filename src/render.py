@@ -83,7 +83,7 @@ def draw_car_info_on_image(car: Car, output_png: BytesIO):
     draw_multiline_text(
         draw=draw,
         text=car.name,
-        position=(205, 550),
+        position=(205, 570),
         font=ImageFont.truetype("static/Montserrat-Bold.ttf", 50),
         fill="white",
         max_width=700  # например, ширина блока в пикселях
