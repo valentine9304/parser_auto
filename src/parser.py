@@ -168,6 +168,7 @@ class AutoRuParser(BaseParser):
         """Parse car data from given URL."""
         url = url or app_settings.URL
         html_content = get_html_with_selenium(url, cookie_domain=".auto.ru")
+        print(f"HTML content was recieved: {url}")
 
         if not html_content:
             raise ParsingError("Не удалось получить содержимое страницы")

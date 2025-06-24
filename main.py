@@ -108,7 +108,7 @@ async def process_car_url(message: types.Message, url: str, parse_func) -> None:
     if not await check_user_access(user_id, message):
         return
 
-    print(f"Processing URL: {url}")
+    print(f"Processing URL by USER: {user_id} : {url}")
 
     try:
         car = parse_func(url)
@@ -117,7 +117,7 @@ async def process_car_url(message: types.Message, url: str, parse_func) -> None:
                 "Не удалось извлечь данные. Проверьте ссылку или попробуйте позже."
             )
             return
-
+        print(f"HTML content was parsed: {url}")
         user_cars[user_id] = car
         media_message_ids = await send_car_media(car, chat_id)
         user_media_messages[user_id] = media_message_ids
@@ -132,6 +132,7 @@ async def process_car_url(message: types.Message, url: str, parse_func) -> None:
         await message.answer(
             full_car_info, reply_markup=create_photo_keyboard(len(car.images))
         )
+        print(f"Answer message was Sent to USER: {user_id}")
 
     except ParsingError as e:
         print(f"Parsing error for URL {url}: {e}")
