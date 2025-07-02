@@ -16,9 +16,6 @@ SPAN_TAG = "span"
 H1_TAG = "h1"
 ROW_CLASS = "CardInfoRow__cell"
 
-# css classes
-TARGET_CLASS = "ControlGroup ControlGroup_responsive_no ControlGroup_size_s ListingPagination__pages"
-
 # car item properties
 ITEM_ID = "CardHead__infoItem CardHead__id"
 ITEM_NAME = "CardHead__title"

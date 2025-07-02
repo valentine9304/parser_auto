@@ -61,7 +61,9 @@ class AutoRuParser(BaseParser):
         second_text: bool = False,
     ) -> str:
         """Extract attribute from a nested div structure."""
+
         content = container.find(tag, class_name)
+        print(content)
         if not content:
             return default
 
@@ -112,8 +114,10 @@ class AutoRuParser(BaseParser):
     def parse_content(self, url: str, content: bytes) -> Car:
         """Parse HTML content and create Car object."""
         soup = BeautifulSoup(content, "html.parser")
+        print(soup)
+        # card_body = soup.find(strings.DIV_TAG, class_="CardOfferBody")
+        card_body = soup
 
-        card_body = soup.find(strings.DIV_TAG, class_="CardOfferBody")
         if not card_body:
             with open("failed_auto_ru.html", "w", encoding="utf-8") as f:
                 f.write(str(soup.prettify()))
@@ -130,13 +134,57 @@ class AutoRuParser(BaseParser):
         price_class = (
             strings.NEW_ITEM_PRICE_CONTENT if is_new_car else strings.ITEM_PRICE_CONTENT
         )
-        car_price = self._parse_price(card_body.find(strings.SPAN_TAG, price_class))
-        if is_new_car and not car_price:
+        price_tag = (
+            strings.DIV_TAG if is_new_car else strings.SPAN_TAG
+        )
+
+        car_price = self._parse_price(card_body.find(price_tag, price_class))
+
+        if is_new_car:
+            car_price = self._parse_price(
+                card_body.find(strings.DIV_TAG, strings.NEW_ITEM_PRICE_CONTENT)
+            )
+            if not car_price:
+                car_price = self._parse_price(
+                    card_body.find(strings.SPAN_TAG, strings.ITEM_PRICE_CONTENT)
+                )
+        else:
             car_price = self._parse_price(
                 card_body.find(strings.SPAN_TAG, strings.ITEM_PRICE_CONTENT)
             )
 
-        # Parse attributes
+        # # Define attribute mappings with custom defaults
+        # attributes = {
+        #     "year": (strings.ITEM_YEAR, "Новый год"),
+        #     "mileage": (strings.ITEM_MILEAGE, "Новый автомобиль"),
+        #     "engine": (strings.ITEM_ENGINE, "Новый двигатель"),
+        #     "transmission": (strings.ITEM_TRANSMISSION, "Новая трансмиссия"),
+        #     "color": (strings.ITEM_COLOR, "Новый цвет"),
+        #     "drive": (strings.ITEM_DRIVE, "Новый привод"),
+        # }
+
+        # new_attributes = {
+        #     "year": (strings.NEW_ITEM_YEAR, "Новый год"),
+        #     "mileage": (strings.NEW_ITEM_MILEAGE, "Новый автомобиль"),
+        #     "engine": (strings.NEW_ITEM_ENGINE, "Новый двигатель"),
+        #     "transmission": (strings.NEW_ITEM_TRANSMISSION, "Новая трансмиссия"),
+        #     "color": (strings.NEW_ITEM_COLOR, "Новый цвет"),
+        #     "drive": (strings.NEW_ITEM_DRIVE, "Новый привод"),
+        # }
+
+        # # Проверяем новая машина или нет, разные страницы для парсинга
+        # if "new" in url.lower():
+        #     car_data = {
+        #                 key: self._extract_attribute(card_body, strings.LI_TAG, attr, default, second_text=True)
+        #                 for key, (attr, default) in new_attributes.items()
+        #             }
+        # else:
+        #     car_data = {
+        #         key: self._extract_attribute(card_body, strings.LI_TAG, attr, default)
+        #         for key, (attr, default) in attributes.items()
+        #     }
+
+        #Parse attributes
         car_data = {
             key: self._extract_attribute(
                 card_body,

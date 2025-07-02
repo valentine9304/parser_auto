@@ -71,14 +71,17 @@ def get_html_with_selenium(
     try:
         with get_selenium_driver() as driver:
             full_url = url
-            if params:
-                full_url += (
-                    f"?{urlencode(params)}"
-                    if "?" not in url
-                    else f"&{urlencode(params)}"
-                )
+            # if params:
+            #     full_url += (
+            #         f"?{urlencode(params)}"
+            #         if "?" not in url
+            #         else f"&{urlencode(params)}"
+                # )
 
-            driver.get(full_url)
+            full_url = url
+            if params:
+                full_url += "?" if "?" not in full_url else "&"
+                full_url += "&".join([f"{k}={v}" for k, v in params.items()])
 
             if app_settings.COOKIE:
                 for cookie_str in app_settings.COOKIE.split(";"):
@@ -88,13 +91,13 @@ def get_html_with_selenium(
                             {"name": name, "value": value, "domain": cookie_domain}
                         )
 
+            driver.get(full_url)
+
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
-
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
             time.sleep(random.uniform(1, 3))
-
             return driver.page_source
 
     except Exception as exc:
