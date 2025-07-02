@@ -125,4 +125,7 @@ class DromParser(BaseParser):
         if not html_content:
             raise ParsingError("Не удалось получить содержимое страницы")
 
+        if "С вашего IP-адреса" in html_content.lower():
+            raise ParsingError("С IP много запросов")
+
         return self.parse_content(url, html_content.encode("utf-8"))
