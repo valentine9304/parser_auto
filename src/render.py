@@ -41,7 +41,9 @@ def generate_test_svg(choice_image, nds: bool = True, template_path: str = "stat
         output_png = BytesIO()
         cairosvg.svg2png(bytestring=svg_content.encode('utf-8'), write_to=output_png)
         output_png.seek(0)  # Перемещаем указатель в начало потока
-        print("PNG создан в памяти")
+
+        size = len(output_png.getvalue())
+        print(f"PNG создан в памяти, размер: {size} байт")
 
         return output_png
 
@@ -83,19 +85,24 @@ def draw_car_info_on_image(car: Car, output_png: BytesIO):
     draw_multiline_text(
         draw=draw,
         text=car.name,
-        position=(205, 570),
+        position=(145, 550),
         font=ImageFont.truetype("static/Montserrat-Bold.ttf", 50),
         fill="white",
-        max_width=700  # например, ширина блока в пикселях
+        max_width=600  # например, ширина блока в пикселях
         )
-    draw.text((500, 735), car.price + " P", font=ImageFont.truetype("static/horizon.otf", 40), fill="black")
-    draw.text((730, 440), car.year, font=ImageFont.truetype("static/horizon.otf", 35), fill="black")
-    draw.text((361, 905), car.engine, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
-    draw.text((361, 980), car.mileage, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
-    draw.text((361, 1065), car.drive, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
-    draw.text((361, 1145), car.color, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
+    draw.text((410, 762), car.price + " P", font=ImageFont.truetype("static/horizon.otf", 30), fill="black")
+    draw.text((543, 402), car.year, font=ImageFont.truetype("static/horizon.otf", 35), fill="black")
+    draw.text((300, 890), car.engine, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
+    draw.text((300, 960), car.mileage, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
+    draw.text((300, 1039), car.drive, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
+    draw.text((300, 1117), car.color, font=ImageFont.truetype("static/Montserrat-BoldItalic.ttf", 30), fill="white")
 
     output_modified = BytesIO()
+    # output_modified = "output.png"
+
     img.save(output_modified, format="PNG")
     output_modified.seek(0)  # Перемещаем указатель в начало
+
+    size = len(output_modified.getvalue())
+    print(f"Отредактированный PNG создан в памяти, размер: {size} байт")
     return output_modified

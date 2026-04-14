@@ -23,7 +23,8 @@ class Settings:
     }
     USE_SELENIUM: bool = os.getenv("USE_SELENIUM")
     USE_SELENIUM_IN_BACKGROUND: bool = os.getenv("USE_SELENIUM_IN_BACKGROUND")
-    TELEGRAM_TOKEN: bool = os.getenv("TELEGRAM_TOKEN")
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+    PROXY_URL = os.getenv("PROXY_URL")
 
 
 app_settings = Settings()

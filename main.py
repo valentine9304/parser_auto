@@ -1,8 +1,6 @@
 """Main Telegram bot logic for parsing car data and generating offers."""
 
-from typing import List, Optional, Dict
-from pathlib import Path
-import asyncio
+from typing import List, Dict
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -14,6 +12,7 @@ from aiogram.types import (
     InputFile,
 )
 
+
 from settings import app_settings
 from src.parser import AutoRuParser
 from src.parser_drom import DromParser
@@ -21,11 +20,15 @@ from utils.parser_utils import ParsingError
 from src.render import generate_test_svg, draw_car_info_on_image
 from src.schemas import Car
 
-bot = Bot(token=app_settings.TELEGRAM_TOKEN)
+
+bot = Bot(
+    token=app_settings.TELEGRAM_TOKEN,
+    proxy=app_settings.PROXY_URL
+)
+
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
-# In-memory storage for user data
 user_cars: Dict[int, Car] = {}
 user_media_messages: Dict[int, List[int]] = {}
 
@@ -227,7 +230,7 @@ async def handle_vat_click(call: CallbackQuery) -> None:
     if nds:
         try:
             cleaned_price = "".join(c for c in car.price if c.isdigit())
-            new_price_int = int(cleaned_price) * 1.2
+            new_price_int = int(cleaned_price) * 1.22
             car.price = "{:,.0f}".format(new_price_int).replace(",", " ")
         except (ValueError, TypeError) as e:
             print(f"Error calculating VAT for price {car.price}: {e}")
@@ -259,10 +262,17 @@ async def handle_vat_click(call: CallbackQuery) -> None:
         await delete_user_messages(chat_id, message_id, media_message_ids)
         user_media_messages.pop(user_id, None)
 
+        await call.answer()
+
         await bot.send_photo(
             chat_id=chat_id,
             photo=InputFile(output_modified, filename="car_offer.png"),
             caption=caption,
+        )
+
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"URL: {car.url}"
         )
 
     except Exception as e:
@@ -271,13 +281,11 @@ async def handle_vat_click(call: CallbackQuery) -> None:
             "Ошибка при создании предложения. Попробуйте снова.", show_alert=True
         )
 
-    await call.answer()
-
 
 if __name__ == "__main__":
     if not app_settings.TELEGRAM_TOKEN:
         raise ValueError("TELEGRAM_TOKEN not found in .env file!")
 
-    print("Bot is starting...")
+    print("Bot is starting...", flush=True)
     setup_handlers(dp)  # Регистрируем обработчики
     executor.start_polling(dp, skip_updates=True)

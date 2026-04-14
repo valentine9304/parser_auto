@@ -32,9 +32,9 @@ class Car:
         """Возвращает красиво отформатированное строковое представление автомобиля."""
         clean = lambda s: str(s).replace('\xa0', ' ').strip() if s else 'Не указано'
         return (
-            "🚗 Информация об автомобиле 🚗\n"
+            # "🚗 Информация об автомобиле 🚗\n"
             # f"ID: {clean(self.id) if self.id is not None else 'Не указан'}\n"
-            f"Название: {clean(self.name) or 'Не указано'}\n"
+            f"{clean(self.name) or 'Не указано'}\n"
             f"Цена: {clean(self.price) + ' P' if self.price else 'Не указана'}\n"
             f"Год: {clean(self.year)}\n"
             f"Пробег: {clean(self.mileage)}\n"
@@ -42,7 +42,7 @@ class Car:
             f"Трансмиссия: {clean(self.transmission)}\n"
             f"Цвет: {clean(self.color)}\n"
             f"Привод: {clean(self.drive)}\n"
-            f"URL: {clean(self.url)}\n\n"
+            # f"URL: {clean(self.url)}\n\n"
         )
 
     def __repr__(self) -> str:

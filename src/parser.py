@@ -61,9 +61,10 @@ class AutoRuParser(BaseParser):
         second_text: bool = False,
     ) -> str:
         """Extract attribute from a nested div structure."""
-
+        print(tag)
+        print(class_name)
         content = container.find(tag, class_name)
-        print(content)
+
         if not content:
             return default
 
@@ -187,10 +188,10 @@ class AutoRuParser(BaseParser):
         #Parse attributes
         car_data = {
             key: self._extract_attribute(
-                card_body,
-                strings.LI_TAG,
-                attrs["new" if is_new_car else "used"],
-                attrs["default"],
+                container=card_body,
+                tag=strings.LI_TAG,
+                class_name=attrs["new" if is_new_car else "used"],
+                default=attrs["default"],
                 second_text=is_new_car,
             )
             for key, attrs in ATTRIBUTE_CLASSES.items()
